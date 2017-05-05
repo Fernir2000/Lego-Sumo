@@ -9,14 +9,15 @@ import lejos.robotics.SampleProvider;
 import lejos.utility.Delay;
 
 public class Main3 {
-	static boolean turnRight;				//All objects initializations that are necessary for whole program
-	final static float LEFT_LINE_THRESHOLD=(float) 0.28;
-	final static float RIGHT_LINE_THRESHOLD=(float)0.5;
-	final static float DISTANCE_THRESHOLD=1;
-	final static float RAGE_THRESHOLD=(float) 0.1;
-	final static float DIFFERENCE_THRESHOLD=(float) 0.2;
-	final static int START_DELAY=5000;
-	final static float REVERSE_DISTANCE=(float) 0.15;
+								//All objects initializations that are necessary for whole program
+	static boolean turnRight;				//Program variable used to determine robots turning direction, set by line detection and sensors
+	final static float LEFT_LINE_THRESHOLD=(float) 0.28;	//Threshold for left line sensor
+	final static float RIGHT_LINE_THRESHOLD=(float)0.5;	//Threshold for right line sensor
+	final static float DISTANCE_THRESHOLD=1;		//Distance threshold for detecting opponents
+	final static float RAGE_THRESHOLD=(float) 0.1;		//Distance to ignore line if opponent is detected by both sensors
+	final static float DIFFERENCE_THRESHOLD=(float) 0.2;	//Difference between left and right distance to consider opponent being in front of a robot
+	final static int START_DELAY=5000;			//Time in milliseconds robot is expected to wait after pressing START button 
+	final static float REVERSE_DISTANCE=(float) 0.15;	//Distance bellow which robot will turn toward detecting sensor instead of opposite action 
 	public static void main(String[] args) {
 		LCD.drawString("Initalizing.", 0, 4);
 		Motors leftMotor = new Motors("Left");
