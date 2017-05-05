@@ -99,7 +99,7 @@ public class Main3 {
 					rightMotor.forward();
 				}else if(rightDistance[0]<DISTANCE_THRESHOLD && rightDistance[0]<leftDistance[0])	//"Gentle" turn toward an opponent
 				{
-					if(rightDistance[0]<REVERSE_DISTANCE){
+					if(rightDistance[0]<REVERSE_DISTANCE){		//TODO Find nicer way of doing this and next part
 						LCD.drawString("ARCHING RIGHT ", 0, 4);
 						turnRight=true;
 						leftMotor.forward();
