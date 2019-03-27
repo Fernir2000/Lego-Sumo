@@ -1,62 +1,161 @@
-import java.io.FileNotFoundException;
-import java.io.FileReader;
-import java.io.IOException;
-
 import lejos.hardware.Button;
 import lejos.hardware.Sound;
 import lejos.hardware.ev3.LocalEV3;
 import lejos.hardware.lcd.LCD;
+import lejos.hardware.sensor.EV3ColorSensor;
+import lejos.hardware.sensor.NXTLightSensor;
 import lejos.hardware.sensor.NXTUltrasonicSensor;
 import lejos.robotics.SampleProvider;
 import lejos.utility.Delay;
 
-
-
-public class Main extends Motors{
-public Main(String side) {
-		super(side);
-		// TODO Auto-generated constructor stub
-	}
-
-	//	static final int speed=600;
-	
-	static float DISTANCE_TRESSHOLD=(float) 0.7;
-	
+public class Main {
+								//All objects initializations that are necessary for whole program
+	static boolean turnRight;				//Program variable used to determine robots turning direction, set by line detection and sensors
+	final static float LEFT_LINE_THRESHOLD=(float) 0.28;	//Threshold for left line sensor
+	final static float RIGHT_LINE_THRESHOLD=(float)0.5;	//Threshold for right line sensor
+	final static float DISTANCE_THRESHOLD=1;		//Distance threshold for detecting opponents
+	final static float RAGE_THRESHOLD=(float) 0.1;		//Distance to ignore line if opponent is detected by both sensors
+	final static float DIFFERENCE_THRESHOLD=(float) 0.2;	//Difference between left and right distance to consider opponent being in front of a robot
+	final static int START_DELAY=5000;			//Time in milliseconds robot is expected to wait after pressing START button 
+	final static float REVERSE_DISTANCE=(float) 0.15;	//Distance bellow which robot will turn toward detecting sensor instead of opposite action 
 	public static void main(String[] args) {
-		
-		Motors LeftMotor = new Motors("Left");
-		Motors RightMotor= new Motors("Right");
-		NXTUltrasonicSensor nxtUltrasonicSensorLeft = new NXTUltrasonicSensor(LocalEV3.get().getPort("S3"));
-		SampleProvider LeftUSSensor = nxtUltrasonicSensorLeft.getDistanceMode();
-		NXTUltrasonicSensor nxtUltrasonicSensorRight = new NXTUltrasonicSensor(LocalEV3.get().getPort("S2"));
-		SampleProvider RightUSSensor = nxtUltrasonicSensorRight.getDistanceMode();
-		float[] leftDistance = new float[1];
-		float[] rightDistance = new float[1];
+		LCD.drawString("Initalizing.", 0, 4);
+		Motors leftMotor = new Motors("Left");
+		Motors rightMotor= new Motors("Right");		
+		LCD.drawChar('.', 12, 4);
+		@SuppressWarnings("resource")		//Sensors initialization (Supposed to give resource leak exception -- Suppressed)
+		SampleProvider leftUSSensor = new NXTUltrasonicSensor(LocalEV3.get().getPort("S2")).getDistanceMode();
+		@SuppressWarnings("resource")
+		SampleProvider rightUSSensor= new NXTUltrasonicSensor(LocalEV3.get().getPort("S3")).getDistanceMode();
+		@SuppressWarnings("resource")
+		SampleProvider leftLineSensor = new EV3ColorSensor(LocalEV3.get().getPort("S1")).getRedMode();
+		@SuppressWarnings("resource")
+		SampleProvider rightLineSensor= new NXTLightSensor(LocalEV3.get().getPort("S4")).getRedMode();
+		LCD.drawChar('.', 13, 4);
+		boolean goOn=true;
+		boolean running=false;
+		float[] leftDistance={Float.POSITIVE_INFINITY};
+		float[] rightDistance={Float.POSITIVE_INFINITY};
+		float[] leftBrightness={0};
+		float[] rightBrightness={0};
 		Sound.beepSequenceUp();
-		while(Button.ENTER.isUp());
-		Sound.twoBeeps();
-		while(Button.ESCAPE.isUp())
+		LCD.clearDisplay();
+		while (goOn)		//Main infinite loop of the program
 		{
-			LeftUSSensor.fetchSample(leftDistance, 0);
-			RightUSSensor.fetchSample(rightDistance, 0);
-			if (leftDistance[0]<DISTANCE_TRESSHOLD)RightMotor.forward();else if (rightDistance[0]<DISTANCE_TRESSHOLD)RightMotor.stop();
-			if (rightDistance[0]<DISTANCE_TRESSHOLD)LeftMotor.forward();else if (leftDistance[0]<DISTANCE_TRESSHOLD)LeftMotor.stop();
-			if (leftDistance[0]>1&&rightDistance[0]>DISTANCE_TRESSHOLD)
+			while(Button.ENTER.isUp())	//Pick direction of turning after being deployed and waiting for 'STARt_DELAY'
 			{
-				LeftMotor.forward();
-				RightMotor.backward();
+				if(Button.LEFT.isDown())
+				{
+					turnRight=false;
+				}
+				else if(Button.RIGHT.isDown())
+				{
+					turnRight=true;
+				}else if(Button.ESCAPE.isDown())
+				{
+					goOn=false;
+					break;
+				}
+				if(turnRight) LCD.drawString("Turning Right", 0, 4);else LCD.drawString("TurningLeft ", 0, 4);
+				Delay.msDelay(20);
+			}
+			LCD.clearDisplay();
+			if(goOn)		//checks if it should its wait for start or go straight to the end
+				{
+				Sound.beep();
+				Delay.msDelay(START_DELAY);
+				running=true;
+				}
+			while(Button.DOWN.isUp()&&goOn)
+			{
+				if(Button.ESCAPE.isDown())goOn=false;			//Checks if program should go to the end sequence or is it only supposed to stop motors and go to direction picker
+				leftUSSensor.fetchSample(leftDistance, 0);		//Provides samples of data for use in this evaluation cycle (ensures consistent value during evaluation				
+				rightUSSensor.fetchSample(rightDistance, 0);	//also reduces amount of external IO 
+				leftLineSensor.fetchSample(leftBrightness, 0);
+				rightLineSensor.fetchSample(rightBrightness, 0);
+			
+				if(leftDistance[0]<RAGE_THRESHOLD && rightDistance[0]<RAGE_THRESHOLD)	//Rage- goes  straight as long as it sees the enemy robot in front of itself within 'RAGE_THRESHOLD'
+				{
+					LCD.drawString("RAGE!!!       ", 0, 4);
+					leftMotor.forward();
+					rightMotor.forward();
+				}else if(leftBrightness[0]>LEFT_LINE_THRESHOLD ||rightBrightness[0]>RIGHT_LINE_THRESHOLD)	//Line avoidance mechanism (tends to turn left when in doubt)
+				{																							//CAUTION!!! LEFT_LINE_THRESHOLD and RIGHT_LINE_THRESHOLD might and probably will be different 
+					LCD.drawString("LINE          ", 0, 4);
+					if(leftBrightness[0]>LEFT_LINE_THRESHOLD)turnRight=true;else turnRight=false;
+					if(turnRight)
+					{
+						leftMotor.stop();
+						rightMotor.backward();
+					}else
+					{
+						leftMotor.backward();
+						rightMotor.stop();
+					}
+				}else if(leftDistance[0]<DISTANCE_THRESHOLD && rightDistance[0]<DISTANCE_THRESHOLD && Math.abs(leftDistance[0]-rightDistance[0])<DIFFERENCE_THRESHOLD)
+				{
+					LCD.drawString("GOING STRAIGHT", 0, 4);		//Identic to Rage except priority and threshold which is defined by 'DISTANCE_THRESHOLD'
+					leftMotor.forward();
+					rightMotor.forward();
+				}else if(rightDistance[0]<DISTANCE_THRESHOLD && rightDistance[0]<leftDistance[0])	//"Gentle" turn toward an opponent
+				{
+					if(rightDistance[0]<REVERSE_DISTANCE){		//TODO Find nicer way of doing this and next part
+						LCD.drawString("ARCHING RIGHT ", 0, 4);
+						turnRight=true;
+						leftMotor.forward();
+						rightMotor.stop(true);
+					}else{
+						LCD.drawString("ARCHING LEFT  ", 0, 4);
+						turnRight=false;
+						leftMotor.stop(true);
+						rightMotor.forward();
+					}
+				}else if(leftDistance[0]<DISTANCE_THRESHOLD && leftDistance[0]<rightDistance[0])
+				{
+					if(leftDistance[0]<REVERSE_DISTANCE){
+						LCD.drawString("ARCHING LEFT  ", 0, 4);
+						turnRight=false;
+						leftMotor.stop(true);
+						rightMotor.forward();
+					}else
+					{
+						LCD.drawString("ARCHING RIGHT ", 0, 4);
+						turnRight=true;
+						leftMotor.forward();
+						rightMotor.stop(true);
+					}
+				}else
+				{
+					LCD.drawString("SCANNING      ", 0, 4);		//Runs scanning sequence, direction based on 'turnRight'
+					if(turnRight)
+					{
+						leftMotor.forward();
+						rightMotor.backward();
+					}else
+					{	
+						leftMotor.backward();
+						rightMotor.forward();
+					}
+				}
+				LCD.drawString(Float.toString(leftBrightness[0]), 0, 0);  	//Displays useful debug info
+				LCD.drawString(Float.toString(rightBrightness[0]), 0, 1);
+				LCD.drawString(Float.toString(leftDistance[0]), 0, 2);
+				LCD.drawString(Float.toString(rightDistance[0]), 0, 3);
+				LCD.drawString(Float.toString(Math.abs(leftDistance[0]-rightDistance[0])), 0, 5);
+				Delay.msDelay(25);
+			}
+			if(running) //Stops motors after leaving navigation loop
+			{
+				LCD.clearDisplay();
+				LCD.drawString("Stopping", 0, 4);
+				leftMotor.stop(true);
+				rightMotor.stop();
+				running=false;
+				if(goOn)Sound.buzz();	//Checks if it's going to make "Good bye!" sound and if not plays "Engines stopped" sound
 			}
 		}
-		LeftMotor.stop(true);
-		RightMotor.stop();
-		
-
-		LeftMotor.close();
-		RightMotor.close();
-		
-		nxtUltrasonicSensorLeft.close();
-		nxtUltrasonicSensorRight.close();
-		
+		LCD.clearDisplay();
+		LCD.drawString("Bye!", 0, 4);
 		Sound.beepSequence();
 	}
 }
